@@ -8,3 +8,34 @@ dependencies = [
     "numpy>=2.4.2",
     "torch>=2.10.0",
 ]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.4",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes (undefined names, unused imports, etc.)
+    "I",   # isort (import sorting)
+    "UP",  # pyupgrade (modernize Python syntax)
+    "B",   # flake8-bugbear (common bug patterns)
+    "SIM", # flake8-simplify (simplifiable code)
+    "C4",  # flake8-comprehensions (better list/dict/set comprehensions)
+]
+ignore = [
+    "E501", # line too long (handled by formatter)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["llm-from-scratch"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
