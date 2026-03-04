@@ -85,12 +85,33 @@ def get_dataloader(
     )
 
 
+def get_embeddings(dataloader, context_length):
+    vocab_size = 50257
+    embedding_dimensionality = 256
+
+    input_batch = next(iter(dataloader))[0]
+    token_embeddings = torch.nn.Embedding(vocab_size, embedding_dimensionality)
+    token_embedding_output = token_embeddings(input_batch)
+
+    absolute_position_embeddings = torch.nn.Embedding(
+        context_length, embedding_dimensionality
+    )
+    absolute_position_embeddings_output = absolute_position_embeddings(
+        torch.arange(context_length)
+    )
+
+    overall_embedding = token_embedding_output + absolute_position_embeddings_output
+    print(overall_embedding.shape)
+
+
 def main():
     with open("data/the-verdict.txt") as f:
         file_contents = f.read()
 
-    dataloader = get_dataloader(file_contents, max_length=5)
-    print(next(iter(dataloader)))
+    context_length = 4
+    dataloader = get_dataloader(file_contents, max_length=context_length)
+
+    get_embeddings(dataloader, context_length)
 
 
 if __name__ == "__main__":
