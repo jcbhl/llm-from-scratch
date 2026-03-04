@@ -1,5 +1,9 @@
 import re
 
+import tiktoken
+import torch
+from torch.utils.data import DataLoader
+
 
 class Tokenizer:
     UNKNOWN_TOKEN = "<|UNK|>"
@@ -41,18 +45,52 @@ class Tokenizer:
         return tokens_without_whitespace
 
 
+class SlidingWindowDataset:
+    def __init__(self, corpus: str, context_length: int, stride: int):
+        self.tokenizer = tiktoken.get_encoding("gpt2")
+        tokenized_corpus = self.tokenizer.encode(corpus)
+
+        self.input_token_ids = []
+        self.output_token_ids = []
+
+        for i in range(0, len(tokenized_corpus) - context_length, stride):
+            input_tokens = tokenized_corpus[i : i + context_length]
+            output_tokens = tokenized_corpus[i + 1 : i + 1 + context_length]
+            self.input_token_ids.append(torch.tensor(input_tokens))
+            self.output_token_ids.append(torch.tensor(output_tokens))
+
+    def __len__(self):
+        return len(self.input_token_ids)
+
+    def __getitem__(self, idx):
+        return self.input_token_ids[idx], self.output_token_ids[idx]
+
+
+def get_dataloader(
+    corpus: str,
+    batch_size=4,
+    max_length=256,
+    stride=128,
+    shuffle=True,
+    drop_last=True,
+    num_workers=0,
+):
+    dataset = SlidingWindowDataset(corpus, context_length=max_length, stride=stride)
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        drop_last=drop_last,
+        num_workers=num_workers,
+    )
+
+
 def main():
     with open("data/the-verdict.txt") as f:
         file_contents = f.read()
 
-    tokenizer = Tokenizer(file_contents)
-    encoded = tokenizer.encode(""""It's the last he painted, you know,"
-                           Mrs. Gisburn said with pardonable pride.""")
-    decoded = tokenizer.decode(encoded)
-    print(decoded)
-
-    text = "Hello, do you like tea? <|EOF|> In the sunlit terraces of the palace."
-    print(tokenizer.decode(tokenizer.encode(text)))
+    dataloader = get_dataloader(file_contents, max_length=5)
+    print(next(iter(dataloader)))
 
 
 if __name__ == "__main__":
