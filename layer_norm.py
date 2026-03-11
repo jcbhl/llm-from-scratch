@@ -4,7 +4,7 @@ import torch
 class LayerNorm(torch.nn.Module):
     EPSILON = 1e-5
 
-    def __init__(self, embedding_dimensionality):
+    def __init__(self, embedding_dimensionality: int):
         super().__init__()
         self.scale = torch.nn.Parameter(torch.ones(embedding_dimensionality))
         self.shift = torch.nn.Parameter(torch.zeros(embedding_dimensionality))
