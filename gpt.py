@@ -5,10 +5,6 @@ import torch.nn as nn
 
 from layer_norm import LayerNorm
 
-# TODO: do we need to train on bf16 rather than default of float32?
-# torch.set_default_dtype(torch.bfloat16)
-# torch.set_default_device('cuda')
-
 
 @dataclass(frozen=True)
 class GPTConfig:
@@ -35,6 +31,7 @@ GPT_CONFIG_124M = GPTConfig(
 class GPTModel(nn.Module):
     def __init__(self, cfg: GPTConfig):
         super().__init__()
+
         self.cfg = cfg
 
         self.token_embeddings = nn.Embedding(
@@ -59,7 +56,7 @@ class GPTModel(nn.Module):
         batch_size, sequence_length = in_idx.shape
         token_embedding_output = self.token_embeddings(in_idx)
         positional_embedding_output = self.positional_embeddings(
-            torch.arange(sequence_length)
+            torch.arange(sequence_length, device=in_idx.device)
         )
         x = token_embedding_output + positional_embedding_output
         x = self.embedding_dropout(x)
@@ -75,57 +72,140 @@ class TransformerBlock(nn.Module):
     def __init__(self, cfg: GPTConfig):
         super().__init__()
 
+        self.attention_layernorm = LayerNorm(cfg.embedding_dimensionality)
+        self.mha = MultiHeadAttention(
+            d_in=cfg.embedding_dimensionality,
+            d_out=cfg.embedding_dimensionality,
+            context_length=cfg.context_length,
+            dropout_rate=cfg.dropout_rate,
+            num_heads=cfg.num_heads,
+            enable_qkv_bias=cfg.enable_qkv_bias,
+        )
+        self.attention_dropout = nn.Dropout(cfg.dropout_rate)
+
+        self.dense_layernorm = LayerNorm(cfg.embedding_dimensionality)
+        self.dense = FeedForward(cfg)
+        self.dense_dropout = nn.Dropout(cfg.dropout_rate)
+
     def forward(self, x: torch.Tensor):
-        # apply layernorm
-        # apply MHA
-        # apply dropout
+        skip = x
+        x = self.attention_layernorm(x)
+        x = self.mha(x)
+        x = self.attention_dropout(x)
+        x = x + skip
 
-        # insert skip
-
-        # apply layernorm
-        # apply fully connected
-        # apply dropout
-
-        # insert skip
-        pass
+        skip = x
+        x = self.dense_layernorm(x)
+        x = self.dense(x)
+        x = self.dense_dropout(x)
+        x = x + skip
+        return x
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, cfg: GPTConfig):
+    def __init__(
+        self,
+        d_in: int,
+        d_out: int,
+        context_length: int,
+        dropout_rate: float,
+        num_heads: int,
+        enable_qkv_bias=False,
+    ):
         super().__init__()
+        assert d_out % num_heads == 0, "d_out must be divisible by num_heads"
+
+        self.d_out = d_out
+        self.num_heads = num_heads
+        self.head_dimensions = d_out // num_heads
+        self.W_query = nn.Linear(d_in, d_out, bias=enable_qkv_bias)
+        self.W_key = nn.Linear(d_in, d_out, bias=enable_qkv_bias)
+        self.W_value = nn.Linear(d_in, d_out, bias=enable_qkv_bias)
+        self.out_projection = nn.Linear(d_out, d_out)
+        self.dropout = nn.Dropout(dropout_rate)
+        self.register_buffer(
+            "mask", torch.triu(torch.ones(context_length, context_length), diagonal=1)
+        )
 
     def forward(self, x: torch.Tensor):
-        # crazy batch stuff
-        pass
+        batch_size, num_tokens, d_in = x.shape
+        queries: torch.Tensor = self.W_query(x)
+        keys: torch.Tensor = self.W_key(x)
+        values: torch.Tensor = self.W_value(x)
+
+        keys = keys.view(batch_size, num_tokens, self.num_heads, self.head_dimensions)
+        values = values.view(
+            batch_size, num_tokens, self.num_heads, self.head_dimensions
+        )
+        queries = queries.view(
+            batch_size, num_tokens, self.num_heads, self.head_dimensions
+        )
+
+        keys = keys.transpose(1, 2)
+        queries = queries.transpose(1, 2)
+        values = values.transpose(1, 2)
+
+        attention_scores = queries @ keys.transpose(2, 3)
+        mask_bools = self.mask.bool()[:num_tokens, :num_tokens]
+
+        attention_scores.masked_fill_(mask_bools, -torch.inf)
+
+        attention_weights = torch.softmax(
+            attention_scores / keys.shape[-1] ** 0.5, dim=-1
+        )
+        attention_weights: torch.Tensor = self.dropout(attention_weights)
+
+        context_vector = (attention_weights @ values).transpose(1, 2)
+        context_vector = context_vector.contiguous().view(
+            batch_size, num_tokens, self.d_out
+        )
+        context_vector = self.out_projection(context_vector)
+        return context_vector
 
 
 class FeedForward(nn.Module):
     def __init__(self, cfg: GPTConfig):
         super().__init__()
 
+        self.layers = nn.Sequential(
+            nn.Linear(cfg.embedding_dimensionality, 4 * cfg.embedding_dimensionality),
+            GELU(),
+            nn.Linear(4 * cfg.embedding_dimensionality, cfg.embedding_dimensionality),
+        )
+
     def forward(self, x: torch.Tensor):
-        # nn.Sequential(
-        #   linear, output 4 * dimensionality?
-        #   GELU
-        #   linear
-        # )
-        pass
+        return self.layers(x)
 
 
 class GELU(nn.Module):
     def __init__(self):
         super().__init__()
-        pass
 
     def forward(self, x: torch.Tensor):
-        # some numerical approximation
-        pass
+        return (
+            0.5
+            * x
+            * (
+                1
+                + torch.tanh(
+                    torch.sqrt(torch.tensor(2.0 / torch.pi))
+                    * (x + 0.044715 * torch.pow(x, 3))
+                )
+            )
+        )
 
 
 def main():
     model = GPTModel(GPT_CONFIG_124M)
+    # model = model.to("cuda").to(torch.bfloat16)
     total_params = sum([torch.numel(param) for param in model.parameters()])
     print(f"Total params for the model: {total_params}")
+
+    byte_size = sum(
+        [torch.numel(param) * param.element_size() for param in model.parameters()]
+    )
+    size_mb = byte_size / (1024 * 1024)
+    print(f"Overall model size: {size_mb:.2f} MB")
 
 
 if __name__ == "__main__":
