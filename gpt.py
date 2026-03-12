@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+import tiktoken
 import torch
 import torch.nn as nn
 
@@ -195,9 +196,48 @@ class GELU(nn.Module):
         )
 
 
+def greedy_generate(
+    model: GPTModel,
+    input_batch: torch.Tensor,
+    length_to_generate: int,
+    context_size: int,
+    tokenizer: tiktoken.Encoding,
+):
+    for _ in range(length_to_generate):
+        trimmed_input = input_batch[:, -context_size:]
+        with torch.no_grad():
+            logits = model(trimmed_input)
+
+        predictions = logits[:, -1, :]
+        probabilities = torch.softmax(predictions, dim=-1)
+        next_token_id = torch.argmax(probabilities, dim=-1, keepdim=True)
+        input_batch = torch.cat((input_batch, next_token_id), dim=1)
+
+        print(tokenizer.decode(next_token_id[0].tolist()), end=" ", flush=True)
+
+
+def run_inference(model: GPTModel, tokenizer: tiktoken.Encoding):
+    num_tokens_to_generate = 5000
+    initial_context = "Hello world!"
+    tokenized_context = tokenizer.encode(initial_context)
+    tokenized_tensor = torch.tensor(tokenized_context).to("cuda").unsqueeze(0)
+    print(initial_context, end=" ")
+
+    greedy_generate(
+        model,
+        tokenized_tensor,
+        num_tokens_to_generate,
+        GPT_CONFIG_124M.context_length,
+        tokenizer,
+    )
+
+
 def main():
+    tokenizer = tiktoken.get_encoding("gpt2")
     model = GPTModel(GPT_CONFIG_124M)
-    # model = model.to("cuda").to(torch.bfloat16)
+    model.eval()
+    model = model.to("cuda").to(torch.bfloat16)
+
     total_params = sum([torch.numel(param) for param in model.parameters()])
     print(f"Total params for the model: {total_params}")
 
@@ -205,7 +245,9 @@ def main():
         [torch.numel(param) * param.element_size() for param in model.parameters()]
     )
     size_mb = byte_size / (1024 * 1024)
-    print(f"Overall model size: {size_mb:.2f} MB")
+    print(f"Overall model size: {size_mb:.2f} MB\n\n")
+
+    run_inference(model, tokenizer)
 
 
 if __name__ == "__main__":
