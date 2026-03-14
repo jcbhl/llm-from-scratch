@@ -122,14 +122,20 @@ def load_from_checkpoint(model: GPTModel):
     load_weights_into_gpt(model, params)
 
 
-def main():
-    tokenizer = tiktoken.get_encoding("gpt2")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+def get_pretrained_model(device: torch.device):
     model = GPTModel(PRETRAINED_124M_CONFIG)
     model.eval()
     load_from_checkpoint(model)
     model.to(device)
+
+    return model
+
+
+def main():
+    tokenizer = tiktoken.get_encoding("gpt2")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    model = get_pretrained_model(device)
 
     token_ids = generate_sample_text(
         model,
