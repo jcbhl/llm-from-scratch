@@ -9,7 +9,7 @@ from tokenizer import get_dataloader
 
 BATCH_SIZE = 16
 LEARNING_RATE = 5e-4
-NUM_EPOCHS = 10
+NUM_EPOCHS = 100
 VAL_FRAC = 0.1
 
 
@@ -86,7 +86,11 @@ def generate_sample_text(
     length_to_generate: int,
     tokenizer: tiktoken.Encoding,
     device: torch.device,
+    top_k: int = None,
+    temperature: float = 1.0,
 ):
+    assert temperature > 0.0
+
     model.eval()
     context_size = model.positional_embeddings.weight.shape[0]
     encoded_context = text_to_token_ids(context, tokenizer).to(device)
@@ -99,9 +103,25 @@ def generate_sample_text(
 
             logits = model(trimmed_input)
 
-            predictions = logits[:, -1, :]
-            probabilities = torch.softmax(predictions, dim=-1)
-            next_token_id = torch.argmax(probabilities, dim=-1, keepdim=True)
+            next_token_logits = logits[:, -1, :]
+
+            if top_k is not None:
+                top_ks, indices = torch.topk(next_token_logits, top_k)
+                smallest_logit = top_ks[:, -1]
+                next_token_logits = torch.where(
+                    condition=next_token_logits < smallest_logit,
+                    input=torch.tensor(float("-inf")).to(device),
+                    other=next_token_logits,
+                )
+
+            next_token_logits = next_token_logits / temperature
+            probabilities = torch.softmax(next_token_logits, dim=-1)
+
+            if temperature is None:
+                next_token_id = torch.argmax(probabilities, dim=-1, keepdim=True)
+            else:
+                next_token_id = torch.multinomial(probabilities, num_samples=1)
+
             model_inputs = torch.cat((model_inputs, next_token_id), dim=1)
 
             print(
@@ -167,7 +187,15 @@ def train_model(
                 print(f"Train loss {train_loss:.3f}")
                 print(f"Val loss {val_loss:.3f}")
 
-                generate_sample_text(model, initial_context, 100, tokenizer, device)
+                generate_sample_text(
+                    model,
+                    initial_context,
+                    100,
+                    tokenizer,
+                    device,
+                    top_k=5,
+                    temperature=8,
+                )
 
 
 def get_dataloaders(raw_dataset: str):
