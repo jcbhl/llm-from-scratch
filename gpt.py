@@ -20,7 +20,7 @@ class GPTConfig:
 
 GPT_CONFIG_124M = GPTConfig(
     vocab_size=50257,
-    context_length=1024,
+    context_length=256,  # TODO change this back to 1024
     embedding_dimensionality=768,
     num_heads=12,
     num_transformer_blocks=12,
@@ -120,6 +120,7 @@ class MultiHeadAttention(nn.Module):
         self.num_heads = num_heads
         self.head_dimensions = d_out // num_heads
         self.W_query = nn.Linear(d_in, d_out, bias=enable_qkv_bias)
+        # TODO KV cache this
         self.W_key = nn.Linear(d_in, d_out, bias=enable_qkv_bias)
         self.W_value = nn.Linear(d_in, d_out, bias=enable_qkv_bias)
         self.out_projection = nn.Linear(d_out, d_out)
