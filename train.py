@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from gpt import GPT_CONFIG_124M, GPTModel
 from tokenizer import get_dataloader
 
-BATCH_SIZE = 2
+BATCH_SIZE = 16
 LEARNING_RATE = 5e-4
 NUM_EPOCHS = 10
 VAL_FRAC = 0.1
@@ -31,8 +31,14 @@ def load_verdict():
 
 
 def load_wikipedia():
-    # TODO
-    pass
+    from datasets import load_dataset
+
+    dataset = load_dataset("wikimedia/wikipedia", "20231101.en")
+    train_set = dataset["train"]
+    num_samples = 5
+    subset = train_set.select(range(num_samples))
+    overall_dataset = "<|endoftext|>".join(subset["text"])
+    return overall_dataset
 
 
 def compute_loss_for_batch(
@@ -98,7 +104,11 @@ def generate_sample_text(
             next_token_id = torch.argmax(probabilities, dim=-1, keepdim=True)
             model_inputs = torch.cat((model_inputs, next_token_id), dim=1)
 
-            print(tokenizer.decode(next_token_id[0].tolist()), end="", flush=True)
+            print(
+                tokenizer.decode(next_token_id[0].tolist()).rstrip(),
+                end="",
+                flush=True,
+            )
 
     model.train()
 
@@ -157,7 +167,7 @@ def train_model(
                 print(f"Train loss {train_loss:.3f}")
                 print(f"Val loss {val_loss:.3f}")
 
-        generate_sample_text(model, initial_context, 100, tokenizer, device)
+                generate_sample_text(model, initial_context, 100, tokenizer, device)
 
 
 def get_dataloaders(raw_dataset: str):
@@ -203,7 +213,7 @@ def main():
         val_loader,
         device,
         tokenizer,
-        batches_per_eval=4,
+        batches_per_eval=5,
         eval_iter=5,
         initial_context="Every effort moves you",
     )

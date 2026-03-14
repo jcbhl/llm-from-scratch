@@ -48,7 +48,9 @@ class Tokenizer:
 class SlidingWindowDataset:
     def __init__(self, corpus: str, context_length: int, stride: int):
         self.tokenizer = tiktoken.get_encoding("gpt2")
-        tokenized_corpus = self.tokenizer.encode(corpus)
+        tokenized_corpus = self.tokenizer.encode(
+            corpus, allowed_special={"<|endoftext|>"}
+        )
 
         self.input_token_ids = []
         self.output_token_ids = []
