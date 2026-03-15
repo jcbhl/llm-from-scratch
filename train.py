@@ -117,10 +117,7 @@ def generate_sample_text(
             next_token_logits = next_token_logits / temperature
             probabilities = torch.softmax(next_token_logits, dim=-1)
 
-            if temperature is None:
-                next_token_id = torch.argmax(probabilities, dim=-1, keepdim=True)
-            else:
-                next_token_id = torch.multinomial(probabilities, num_samples=1)
+            next_token_id = torch.multinomial(probabilities, num_samples=1)
 
             model_inputs = torch.cat((model_inputs, next_token_id), dim=1)
 

@@ -20,7 +20,7 @@ class GPTConfig:
 
 GPT_CONFIG_124M = GPTConfig(
     vocab_size=50257,
-    context_length=256,  # TODO change this back to 1024
+    context_length=1024,
     embedding_dimensionality=768,
     num_heads=12,
     num_transformer_blocks=12,
