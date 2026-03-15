@@ -161,7 +161,7 @@ def load_gpt2_params_from_tf_ckpt(ckpt_path, settings):
 
 
 def main():
-    settings, params = download_and_load_gpt2("124M", models_dir="pretrained_weights")
+    settings, params = download_and_load_gpt2("355M", models_dir="pretrained_weights")
     print("Done downloading")
     print("settings:", settings)
 

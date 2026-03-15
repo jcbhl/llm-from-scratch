@@ -163,11 +163,12 @@ def train_model(
     batches_per_eval: int,
     eval_iter: int,
     initial_context: str,
+    num_epochs: int = NUM_EPOCHS,
 ):
     tokens_seen, global_step = 0, -1
 
     model.train()
-    for epoch in range(NUM_EPOCHS):
+    for epoch in range(num_epochs):
         for input_batch, target_batch in train_loader:
             model.zero_grad()
 
@@ -183,7 +184,7 @@ def train_model(
                     model, train_loader, val_loader, device, eval_iter
                 )
 
-                print(f"Epoch {epoch} (Step {global_step:06d}):")
+                print(f"\n\n\nEpoch {epoch} (Step {global_step:06d}):")
                 print(f"Train loss {train_loss:.3f}")
                 print(f"Val loss {val_loss:.3f}")
 

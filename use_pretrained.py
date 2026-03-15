@@ -7,7 +7,7 @@ import tensorflow as tf
 import tiktoken
 import torch
 
-from gpt import GPT_CONFIG_124M, GPTModel
+from gpt import GPT_CONFIG_124M, GPTConfig, GPTModel
 from gpt_download import load_gpt2_params_from_tf_ckpt
 from train import generate_sample_text, token_ids_to_text
 
@@ -20,6 +20,14 @@ MODEL_CONFIGS = {
 
 PRETRAINED_124M_CONFIG = replace(
     GPT_CONFIG_124M, context_length=1024, enable_qkv_bias=True
+)
+PRETRAINED_355M_CONFIG = replace(
+    GPT_CONFIG_124M,
+    embedding_dimensionality=1024,
+    num_heads=16,
+    num_transformer_blocks=24,
+    context_length=1024,
+    enable_qkv_bias=True,
 )
 
 
@@ -111,10 +119,11 @@ def load_weights_into_gpt(gpt: GPTModel, params):
     gpt.output_head.weight = assign(gpt.output_head.weight, params["wte"])
 
 
-def load_from_checkpoint(model: GPTModel):
-    tf_ckpt_path = tf.train.latest_checkpoint("pretrained_weights/124M")
+def load_from_checkpoint(model: GPTModel, param_string: str = "124"):
+    tf_ckpt_path = tf.train.latest_checkpoint(f"pretrained_weights/{param_string}M")
     with open(
-        os.path.join("pretrained_weights/124M", "hparams.json"), encoding="utf-8"
+        os.path.join(f"pretrained_weights/{param_string}M", "hparams.json"),
+        encoding="utf-8",
     ) as f:
         settings = json.load(f)
 
@@ -122,10 +131,14 @@ def load_from_checkpoint(model: GPTModel):
     load_weights_into_gpt(model, params)
 
 
-def get_pretrained_model(device: torch.device):
-    model = GPTModel(PRETRAINED_124M_CONFIG)
+def get_pretrained_model(
+    device: torch.device,
+    config: GPTConfig = PRETRAINED_124M_CONFIG,
+    param_string: str = "124",
+):
+    model = GPTModel(config)
     model.eval()
-    load_from_checkpoint(model)
+    load_from_checkpoint(model, param_string)
     model.to(device)
 
     return model
